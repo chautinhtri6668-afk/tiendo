@@ -1,0 +1,71 @@
+/* Font hệ thống hỗ trợ tiếng Việt và cỡ chữ dễ đọc hơn */
+html { font-size: 16px; }
+body, button, input, select, textarea, h1, h2, h3, .hero h2, .panel h3, .metric strong, .orbit-core strong, .person-score b { font-family: Arial, "Segoe UI", Tahoma, sans-serif !important; }
+.eyebrow, .hero-kicker, .section-tag { font-size: 11px; }
+.hero p:last-child { font-size: 14px; }
+.search input, .filters select { font-size: 13px; }
+.metric span { font-size: 10px; }
+.metric small { font-size: 10px; color: #718a86; }
+.status-row-head, .status-row-head b { font-size: 13px; }
+.muted { font-size: 11px; }
+.person b { font-size: 13px; }
+.person small { font-size: 10px; }
+.person-score small { font-size: 9px; }
+.table-tools span, .pagination span { font-size: 11px; }
+.toast { font-size: 12px; }
+table { min-width: 1380px; }
+th { font-size: 13px; padding: 14px 11px; }
+td { font-size: 14px; max-width: 250px; padding: 13px 11px; vertical-align: middle; }
+.badge { font-size: 11px; }
+.edit-field { width: 190px; min-height: 39px; border: 1px solid var(--line); border-radius: 7px; background: #fff; padding: 8px 9px; font-size: 13px; color: var(--ink); }
+textarea.edit-field { min-height: 78px; resize: vertical; }
+select.edit-field { width: 130px; }
+.badge.done { background: #dff3df; color: #287a3c; }
+.badge.working { background: #fff0bf; color: #946800; }
+.badge.pending { background: #ffe1bd; color: #a65312; }
+.edit-control { display: none; }
+.editing .edit-control { display: inline-block; }
+.editing .cell-view, .editing .status-view, .editing .edit-btn { display: none; }
+.cell-view { max-width: 230px; line-height: 1.5; }
+.expandable { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; border-radius: 5px; padding: 3px 5px; margin: -3px -5px; }
+.expandable:hover { background: #f0f6f3; color: var(--teal-dark); }
+.expandable.expanded { white-space: normal; overflow: visible; min-width: 230px; max-width: 380px; overflow-wrap: anywhere; background: #f0f6f3; }
+.action-cell { text-align: center; min-width: 64px; }
+.icon-btn { width: 31px; height: 31px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--teal-dark); font-size: 16px; font-weight: 700; cursor: pointer; padding: 0; }
+.icon-btn:hover { border-color: var(--teal); background: var(--mint); }
+.save-btn { background: var(--teal); color: #fff; border-color: var(--teal); }
+.icon-btn:disabled { opacity: .55; cursor: wait; }
+.lock-icon { display: inline-grid; place-items: center; width: 29px; height: 29px; border-radius: 50%; background: #dff3df; color: #287a3c; font-weight: 800; }
+.locked-row { background: #fbfdfb; }
+.hero-title p { margin: 0 0 12px; color: var(--teal); font-size: 14px; line-height: 1.4; font-weight: 800; letter-spacing: 2px; }
+.hero-title h2 { margin: 0; color: var(--ink); font-size: 40px; line-height: 1.15; font-weight: 800; letter-spacing: -.8px; }
+.hero-title h3 { margin: 7px 0 0; color: var(--teal); font-size: 29px; line-height: 1.2; font-weight: 700; }
+@media (max-width: 760px) { .hero-title h2 { font-size: 31px; } .hero-title h3 { font-size: 23px; } }
+
+/* Header gọn và nội dung tổng quan dễ đọc hơn */
+header { height: 58px; justify-content: flex-end; }
+.menu-btn { margin-right: auto; }
+.metric span { font-size: 12px; letter-spacing: 1.2px; }
+.metric strong { font-size: 34px; }
+.metric small { font-size: 12px; line-height: 1.4; }
+.metric-icon { width: 44px; height: 44px; font-size: 20px; }
+.panel h3 { font-size: 23px; }
+.section-tag { font-size: 12px; }
+.status-row-head, .status-row-head b { font-size: 15px; }
+.team-row { grid-template-columns: 40px 1fr auto; padding: 13px 0; }
+.avatar { width: 36px; height: 36px; font-size: 11px; }
+.person b { font-size: 15px; }
+.person small { font-size: 12px; margin-top: 3px; }
+.person-score b { font-size: 18px; }
+.person-score small { font-size: 10px; }
+.live-pill, .table-tools span { font-size: 11px; }
+@media (max-width: 760px) { header { height: 54px; } }
+
+/* Nhấn mạnh khối hiệu suất nhân sự */
+#team .section-tag { font-size: 14px; letter-spacing: 1.7px; }
+#team h3 { font-size: 28px; margin-top: 7px; }
+#team .muted { font-size: 13px; }
+#team .person b { font-size: 16px; }
+#team .person small { color: #1677c8; font-size: 13px; font-weight: 700; }
+#team .person-score b { color: #0b648f; font-size: 20px; }
+.completed-cell { min-width: 125px; }
