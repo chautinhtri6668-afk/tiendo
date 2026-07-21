@@ -6,10 +6,11 @@ const CONFIG = {
   contactSheets: ['TTVT8', '18 Trung tâm Viễn Thông', 'Lãnh đạo P.HT', 'Danh bạ P.HT', 'DB mới 1-10', 'VNPT địa bàn'],
   contactsCsvUrl: 'https://docs.google.com/spreadsheets/d/1Xd88BoxLjjv7oY05yQEz-8NcPJCC0iUe/export?format=csv&gid=1904024602',
   contactsFallbackCsv: './contacts.csv',
-  pageSize: 18
+  pageSize: 18,
+  autoRefreshMs: 60000
 };
 
-const state = { all: [], filtered: [], contacts: [], contactFiltered: [], page: 1, contactSheet: CONFIG.contactSheets[0] };
+const state = { all: [], filtered: [], contacts: [], contactFiltered: [], page: 1, contactSheet: CONFIG.contactSheets[0], sortMode: 'assigned-desc' };
 const $ = (id) => document.getElementById(id);
 
 function parseCSV(text) {
@@ -62,11 +63,11 @@ async function loadData(showMessage = false) {
   $('refreshBtn').disabled = true;
   try {
     if (CONFIG.appsScriptUrl) {
-      const res = await fetch(CONFIG.appsScriptUrl, { cache: 'no-store' });
+      const res = await fetch(appsScriptEndpoint({ action: 'progress', ts: Date.now() }), { cache: 'no-store' });
       if (!res.ok) throw new Error('Không thể kết nối Apps Script');
       const json = await res.json();
       state.all = (Array.isArray(json) ? json : json.data).map(x => ({ ...x, status: x.status?.trim() || 'Chưa cập nhật', note: x.note || '' }));
-      $('sourceLabel').textContent = 'Đồng bộ trực tiếp từ Google Sheet';
+      $('sourceLabel').textContent = `Đồng bộ Google Sheet - ${state.all.length.toLocaleString('vi-VN')} phiếu`;
     } else {
       const res = await fetch(CONFIG.fallbackCsv, { cache: 'no-store' });
       if (!res.ok) throw new Error('Không tìm thấy sheet.csv');
@@ -172,26 +173,50 @@ function compactDate(value) {
   const year = match[3] ? (match[3].length === 2 ? `20${match[3]}` : match[3]) : '';
   return `${day}${month}${year}`;
 }
+function compactCode(value) {
+  return String(value ?? '').toLocaleLowerCase('vi').replace(/[^a-z0-9]/gi, '');
+}
+function compactDateDigits(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (![4, 8].includes(digits.length)) return '';
+  const day = Number(digits.slice(0, 2)), month = Number(digits.slice(2, 4));
+  if (day < 1 || day > 31 || month < 1 || month > 12) return '';
+  return digits;
+}
 function itemSearchText(item) {
   return Object.values(item).map(compactText).join(' ');
 }
+function itemSearchCode(item) {
+  return Object.values(item).map(compactCode).join(' ');
+}
 function matchesSearch(item, query) {
   const normalized = compactText(query);
-  const compactQuery = compactDate(normalized) || normalized.replace(/\D/g, '');
-  const looksLikeDate = compactQuery.length >= 3 && /[\d\/\-\.]/.test(normalized);
+  const compactQuery = compactDate(normalized) || compactDateDigits(normalized);
+  const looksLikeDate = Boolean(compactQuery);
   if (looksLikeDate) {
     const assignedText = compactText(item.assigned);
     const assignedCompact = compactDate(item.assigned);
     return assignedText.includes(normalized) || assignedCompact.includes(compactQuery);
   }
-  return itemSearchText(item).includes(normalized);
+  const codeQuery = compactCode(normalized);
+  return itemSearchText(item).includes(normalized) || (codeQuery.length >= 3 && itemSearchCode(item).includes(codeQuery));
 }
 
 function applyFilters() {
   const q = $('searchInput').value.trim();
   const employee = $('employeeFilter').value, status = $('statusFilter').value, service = $('serviceFilter').value;
   state.filtered = state.all.filter(x => (!employee || x.employee === employee) && (!status || x.status === status) && (!service || x.service === service) && (!q || matchesSearch(x, q)));
+  sortFiltered();
   state.page = 1; render();
+}
+
+function sortFiltered() {
+  const direction = state.sortMode === 'assigned-asc' ? 1 : -1;
+  state.filtered.sort((a, b) => {
+    const timeA = parseVnDate(a.assigned)?.getTime() || 0;
+    const timeB = parseVnDate(b.assigned)?.getTime() || 0;
+    return (timeA - timeB) * direction || (Number(a.id) - Number(b.id)) * direction;
+  });
 }
 
 function render() { renderMetrics(); renderStatus(); renderTeam(); renderTable(); }
@@ -231,6 +256,11 @@ function slaHours(service) { return /fiber/i.test(service || '') ? 24 : 48; }
 function formatDeadline(date) {
   return new Intl.DateTimeFormat('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }).format(date);
 }
+function formatTableDate(value) {
+  const text = escapeHtml(value || '');
+  const match = text.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(.+)$/);
+  return match ? `<span class="date-stack"><b>${match[1]}</b><small>${match[2]}</small></span>` : text || '—';
+}
 function formatDuration(ms) {
   const totalMinutes = Math.max(1, Math.ceil(Math.abs(ms) / 60000));
   const days = Math.floor(totalMinutes / 1440), hours = Math.floor((totalMinutes % 1440) / 60), minutes = totalMinutes % 60;
@@ -269,7 +299,7 @@ function renderTable() {
   $('workTable').innerHTML = data.map(x => {
     const sla = slaInfo(x);
     const tooltip = `${sla.label} | ${sla.meta}`;
-    return `<tr data-id="${x.id}" class="${isLocked(x)?'locked-row':''}"><td>${escapeHtml(x.assigned)}</td><td>${escapeHtml(x.transaction)}</td><td>${escapeHtml(x.subscriber)}</td><td>${escapeHtml(x.service)}</td><td><span class="sla-chip ${sla.className}" data-tooltip="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${escapeHtml(sla.shortLabel)}</span></td><td>${escapeHtml(x.employee)}</td><td><span class="badge status-view ${badgeClass(x.status)}">${escapeHtml(statusLabel(x.status))}</span><select class="edit-field row-status edit-control"><option value="Chưa cập nhật" ${x.status==='Chưa cập nhật'||!x.status?'selected':''}>Chưa cập nhật</option><option value="Đang xử lý" ${x.status==='Đang xử lý'?'selected':''}>Đang xử lý</option><option value="Đã hoàn công" ${isDone(x)?'selected':''}>Đã hoàn công</option></select></td><td class="completed-cell">${escapeHtml(x.completed) || '—'}</td><td><div class="cell-view expandable" onclick="toggleCell(this)" title="Bấm để xem đầy đủ">${escapeHtml(x.issue) || '—'}</div><textarea class="edit-field row-issue edit-control" placeholder="Nội dung vướng mắc">${escapeHtml(x.issue)}</textarea></td><td><div class="cell-view expandable" onclick="toggleCell(this)" title="Bấm để xem đầy đủ">${escapeHtml(x.note || '') || '—'}</div><textarea class="edit-field row-note edit-control" placeholder="Đầu mối kỹ thuật, thi công...">${escapeHtml(x.note || '')}</textarea></td><td class="action-cell">${isLocked(x)?'<span class="lock-icon" title="Phiếu đã hoàn công">✓</span>':`<button class="icon-btn edit-btn" onclick="editRow(${x.id}, this)" title="Sửa phiếu" aria-label="Sửa phiếu">✎</button><button class="icon-btn save-btn edit-control" onclick="saveRow(${x.id}, this)" title="Lưu phiếu" aria-label="Lưu phiếu">✓</button>`}</td></tr>`;
+    return `<tr data-id="${x.id}" class="${isLocked(x)?'locked-row':''}"><td class="date-cell">${formatTableDate(x.assigned)}</td><td class="transaction-cell">${escapeHtml(x.transaction)}</td><td>${escapeHtml(x.subscriber)}</td><td>${escapeHtml(x.service)}</td><td><span class="sla-chip ${sla.className}" data-tooltip="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${escapeHtml(sla.shortLabel)}</span></td><td class="employee-cell">${escapeHtml(x.employee)}</td><td><span class="badge status-view ${badgeClass(x.status)}">${escapeHtml(statusLabel(x.status))}</span><select class="edit-field row-status edit-control"><option value="Chưa cập nhật" ${x.status==='Chưa cập nhật'||!x.status?'selected':''}>Chưa cập nhật</option><option value="Đang xử lý" ${x.status==='Đang xử lý'?'selected':''}>Đang xử lý</option><option value="Đã hoàn công" ${isDone(x)?'selected':''}>Đã hoàn công</option></select></td><td class="completed-cell date-cell">${formatTableDate(x.completed)}</td><td class="issue-cell" data-full="${escapeHtml(x.issue || 'Không có vướng mắc')}"><div class="cell-view hover-full multiline" title="${escapeHtml(x.issue || 'Không có vướng mắc')}">${escapeHtml(x.issue) || '—'}</div><textarea class="edit-field row-issue edit-control" placeholder="Nội dung vướng mắc">${escapeHtml(x.issue)}</textarea></td><td class="note-cell" data-full="${escapeHtml(x.note || 'Không có ghi chú')}"><div class="cell-view hover-full multiline" title="${escapeHtml(x.note || 'Không có ghi chú')}">${escapeHtml(x.note || '') || '—'}</div><textarea class="edit-field row-note edit-control" placeholder="Đầu mối kỹ thuật, thi công...">${escapeHtml(x.note || '')}</textarea></td><td class="action-cell">${isLocked(x)?'<span class="lock-icon" title="Phiếu đã hoàn công">✓</span>':`<button class="icon-btn edit-btn" onclick="editRow(${x.id}, this)" title="Sửa phiếu" aria-label="Sửa phiếu">✎</button><button class="icon-btn save-btn edit-control" onclick="saveRow(${x.id}, this)" title="Lưu phiếu" aria-label="Lưu phiếu">✓</button>`}</td></tr>`;
   }).join('') || '<tr><td colspan="11" class="empty">Không tìm thấy công việc phù hợp</td></tr>';
   $('pageLabel').textContent = `Trang ${state.page} / ${pages}`; $('prevPage').disabled = state.page <= 1; $('nextPage').disabled = state.page >= pages;
 }
@@ -327,13 +357,23 @@ function formatNow() {
   return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}:${get('second')}`;
 }
 
+function startAutoRefresh() {
+  if (!CONFIG.autoRefreshMs) return;
+  setInterval(() => {
+    if (document.querySelector('tr.editing')) return;
+    loadData(false);
+  }, CONFIG.autoRefreshMs);
+}
+
 $('searchInput').addEventListener('input', applyFilters); ['employeeFilter','statusFilter','serviceFilter'].forEach(id=>$(id).addEventListener('change',applyFilters));
 $('clearFilters').onclick = () => { $('searchInput').value=''; ['employeeFilter','statusFilter','serviceFilter'].forEach(id=>$(id).value=''); applyFilters(); };
 $('contactSearchInput').addEventListener('input', applyContactFilters); $('contactCenterFilter').addEventListener('change', applyContactFilters);
 $('contactSheetFilter').addEventListener('change', () => { state.contactSheet = $('contactSheetFilter').value; loadContacts(); });
 $('clearContactFilters').onclick = () => { $('contactSearchInput').value=''; $('contactCenterFilter').value=''; applyContactFilters(); };
+$('sortMode').addEventListener('change', () => { state.sortMode = $('sortMode').value; sortFiltered(); state.page = 1; render(); });
 $('prevPage').onclick=()=>{state.page--;renderTable()}; $('nextPage').onclick=()=>{state.page++;renderTable()}; $('exportBtn').onclick=exportCSV; $('refreshBtn').onclick=()=>loadData(true);
 $('menuBtn').onclick=()=>document.querySelector('.sidebar').classList.toggle('open'); document.querySelectorAll('.sidebar a').forEach(a=>a.onclick=()=>document.querySelector('.sidebar').classList.remove('open'));
 $('today').textContent = new Intl.DateTimeFormat('vi-VN',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date());
 loadData();
 loadContacts();
+startAutoRefresh();

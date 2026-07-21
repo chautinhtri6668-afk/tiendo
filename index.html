@@ -23,7 +23,7 @@
   <main>
     <header>
       <button class="menu-btn" id="menuBtn" aria-label="Mở menu">☰</button>
-      <div class="header-actions"><span class="today" id="today"></span><button id="refreshBtn" class="refresh">↻ <span>Làm mới</span></button></div>
+      <div class="header-actions"><span class="today" id="today"></span><a class="refresh docs-link" href="https://docs.google.com/spreadsheets/d/1-IF5c92exMTG1BNiuHuSq4NA1tyrTPiQLXcokGNTRAI/" target="_blank" rel="noopener">↗ <span>Link Docs Google</span></a><button id="refreshBtn" class="refresh">↻ <span>Làm mới</span></button></div>
     </header>
 
     <section id="overview" class="hero">
@@ -58,8 +58,8 @@
     </section>
 
     <section id="work" class="panel table-panel">
-      <div class="panel-head"><div><span class="section-tag">CHI TIẾT</span><h3>Danh sách công việc</h3></div><div class="table-tools"><span id="resultCount">0 kết quả</span><button id="exportBtn">↓ Xuất CSV</button></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Ngày giao</th><th>Mã giao dịch</th><th>Mã thuê bao</th><th>Dịch vụ</th><th>Cảnh báo</th><th>Người thực hiện</th><th>Trạng thái</th><th>Ngày hoàn công</th><th>Vướng mắc</th><th>Ghi chú</th><th>Cập nhật</th></tr></thead><tbody id="workTable"></tbody></table></div>
+      <div class="panel-head"><div><span class="section-tag">CHI TIẾT</span><h3>Danh sách công việc</h3></div><div class="table-tools"><span id="resultCount">0 kết quả</span><select id="sortMode"><option value="assigned-desc">Ngày giao mới nhất</option><option value="assigned-asc">Ngày giao cũ nhất</option></select><button id="exportBtn">↓ Xuất CSV</button></div></div>
+      <div class="table-wrap"><table class="work-table"><thead><tr><th>Ngày giao</th><th>Mã giao dịch</th><th>Mã thuê bao</th><th>Dịch vụ</th><th>Cảnh báo</th><th>Người thực hiện</th><th>Trạng thái</th><th>Ngày hoàn công</th><th>Vướng mắc</th><th>Ghi chú</th><th>Cập nhật</th></tr></thead><tbody id="workTable"></tbody></table></div>
       <div class="pagination"><button id="prevPage">←</button><span id="pageLabel">Trang 1 / 1</span><button id="nextPage">→</button></div>
     </section>
 
@@ -78,6 +78,6 @@
     </section>
   </main>
   <div id="toast" class="toast"></div>
-  <script src="app.js"></script>
+  <script src="app.js?v=20260721-sync"></script>
 </body>
 </html>
