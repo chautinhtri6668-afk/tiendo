@@ -13,7 +13,7 @@ body, button, input, select, textarea, h1, h2, h3, .hero h2, .panel h3, .metric 
 .person-score small { font-size: 9px; }
 .table-tools span, .pagination span { font-size: 11px; }
 .toast { font-size: 12px; }
-table { min-width: 1380px; }
+table { min-width: 1520px; }
 th { font-size: 13px; padding: 14px 11px; }
 td { font-size: 14px; max-width: 250px; padding: 13px 11px; vertical-align: middle; }
 .badge { font-size: 11px; }
@@ -69,3 +69,28 @@ header { height: 58px; justify-content: flex-end; }
 #team .person small { color: #1677c8; font-size: 13px; font-weight: 700; }
 #team .person-score b { color: #0b648f; font-size: 20px; }
 .completed-cell { min-width: 125px; }
+.sla-chip { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 74px; max-width: 92px; min-height: 30px; border-radius: 8px; padding: 6px 8px; font-size: 12px; font-weight: 800; line-height: 1; white-space: nowrap; border: 1px solid transparent; cursor: help; }
+.sla-chip.ok, .sla-chip.done { background: #dff3df; color: #287a3c; border-color: #bde0bd; }
+.sla-chip.warn { background: #fff4bf; color: #876300; border-color: #f0d778; }
+.sla-chip.urgent { background: #ffe1bd; color: #a65312; border-color: #efb06c; }
+.sla-chip.overdue { background: #fbe1df; color: #b4322c; border-color: #efaaa6; }
+.sla-chip.unknown { background: #eef2f1; color: #6b8582; border-color: #dce7e2; }
+.sla-chip::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 9px); transform: translateX(-50%) translateY(4px); width: max-content; max-width: 260px; padding: 9px 11px; border-radius: 8px; background: #153b3b; color: #fff; font-size: 12px; font-weight: 700; line-height: 1.35; white-space: normal; box-shadow: 0 12px 30px #153b3b30; opacity: 0; pointer-events: none; transition: .16s ease; z-index: 30; }
+.sla-chip::before { content: ""; position: absolute; left: 50%; bottom: calc(100% + 3px); transform: translateX(-50%) translateY(4px); border: 6px solid transparent; border-top-color: #153b3b; opacity: 0; pointer-events: none; transition: .16s ease; z-index: 31; }
+.sla-chip:hover::after, .sla-chip:hover::before { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* Danh bạ đầu mối HNI */
+.contacts-panel { scroll-margin-top: 18px; }
+.contact-filters { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(190px, .36fr) minmax(210px, .45fr) auto; gap: 10px; margin-bottom: 16px; }
+.contact-filters .search { min-height: 43px; }
+.contact-filters select { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 0 12px; color: var(--ink); font-size: 13px; outline: none; }
+.contacts-table { min-width: 1120px; }
+.contacts-table td:nth-child(2), .contacts-table td:nth-child(3) { font-weight: 400; }
+.contacts-table td:nth-child(3) b { display: block; color: var(--ink); font-size: 15px; }
+.contacts-table td:nth-child(3) small { display: block; margin-top: 4px; color: var(--teal-dark); font-size: 11px; font-weight: 800; }
+.contacts-table a { color: #0b648f; text-decoration: none; font-weight: 700; }
+.contacts-table a:hover { text-decoration: underline; }
+@media (max-width: 760px) {
+  .contact-filters { grid-template-columns: 1fr; }
+  .contact-filters .clear-btn { grid-column: auto; }
+}

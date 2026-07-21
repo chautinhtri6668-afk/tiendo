@@ -15,6 +15,7 @@
       <a class="active" href="#overview"><span>▦</span>Tổng quan</a>
       <a href="#work"><span>≡</span>Danh sách công việc</a>
       <a href="#team"><span>♙</span>Hiệu suất nhân sự</a>
+      <a href="#contacts"><span>☎</span>Đầu mối TTVT HNI</a>
     </nav>
     <div class="side-note"><span class="pulse"></span><div><b>Dữ liệu vận hành</b><small id="sourceLabel">Đang tải dữ liệu...</small></div></div>
   </aside>
@@ -31,7 +32,7 @@
     </section>
 
     <section class="filters" aria-label="Bộ lọc">
-      <label class="search"><span>⌕</span><input id="searchInput" placeholder="Tìm mã giao dịch, thuê bao, nội dung..." /></label>
+      <label class="search"><span>⌕</span><input id="searchInput" placeholder="Tìm mã giao dịch, thuê bao, ngày tháng..." /></label>
       <select id="employeeFilter"><option value="">Tất cả nhân viên</option></select>
       <select id="statusFilter"><option value="">Tất cả trạng thái</option></select>
       <select id="serviceFilter"><option value="">Tất cả dịch vụ</option></select>
@@ -58,8 +59,22 @@
 
     <section id="work" class="panel table-panel">
       <div class="panel-head"><div><span class="section-tag">CHI TIẾT</span><h3>Danh sách công việc</h3></div><div class="table-tools"><span id="resultCount">0 kết quả</span><button id="exportBtn">↓ Xuất CSV</button></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Ngày giao</th><th>Mã giao dịch</th><th>Mã thuê bao</th><th>Dịch vụ</th><th>Người thực hiện</th><th>Trạng thái</th><th>Ngày hoàn công</th><th>Vướng mắc</th><th>Ghi chú</th><th>Cập nhật</th></tr></thead><tbody id="workTable"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Ngày giao</th><th>Mã giao dịch</th><th>Mã thuê bao</th><th>Dịch vụ</th><th>Cảnh báo</th><th>Người thực hiện</th><th>Trạng thái</th><th>Ngày hoàn công</th><th>Vướng mắc</th><th>Ghi chú</th><th>Cập nhật</th></tr></thead><tbody id="workTable"></tbody></table></div>
       <div class="pagination"><button id="prevPage">←</button><span id="pageLabel">Trang 1 / 1</span><button id="nextPage">→</button></div>
+    </section>
+
+    <section id="contacts" class="panel table-panel contacts-panel">
+      <div class="panel-head">
+        <div><span class="section-tag">ĐẦU MỐI</span><h3>TTVT HNI</h3><small id="contactSourceLabel" class="muted">Đang tải danh bạ...</small></div>
+        <div class="table-tools"><span id="contactCount">0 đầu mối</span></div>
+      </div>
+      <div class="contact-filters">
+        <label class="search"><span>⌕</span><input id="contactSearchInput" placeholder="Tìm trung tâm, tổ, họ tên, mail, số ĐT..." /></label>
+        <select id="contactSheetFilter"><option value="">Chọn sheet</option></select>
+        <select id="contactCenterFilter"><option value="">Tất cả trung tâm</option></select>
+        <button id="clearContactFilters" class="clear-btn">Xóa lọc</button>
+      </div>
+      <div class="table-wrap"><table class="contacts-table"><thead><tr><th>Trung tâm</th><th>Tổ/địa bàn</th><th>Họ tên</th><th>Số ĐT</th><th>Mail</th><th>NTNS</th><th>Ghi chú</th></tr></thead><tbody id="contactsTable"></tbody></table></div>
     </section>
   </main>
   <div id="toast" class="toast"></div>
