@@ -31,10 +31,21 @@ function parseCSV(text) {
 
 function normalizeRows(rows) {
   return rows.slice(1).filter(r => r.slice(0, 8).some(Boolean)).map((r, index) => ({
-    id: index + 1, assigned: r[0]?.trim() || '', transaction: r[1]?.trim() || '',
+    id: index + 1, assigned: r[0]?.trim() || '', transaction: normalizeTransaction(r[1], r[2]),
     subscriber: r[2]?.trim() || '', service: r[3]?.trim() || '', employee: r[4]?.trim() || 'Chưa phân công',
     status: r[5]?.trim() || 'Chưa cập nhật', completed: r[6]?.trim() || '', issue: r[7]?.trim() || '', note: r[8]?.trim() || ''
   }));
+}
+
+function normalizeTransaction(transaction, subscriber) {
+  const text = String(transaction ?? '').trim();
+  if (!text || String(subscriber ?? '').trim()) return text;
+  if (text.startsWith('000')) return text;
+  return /^\d{1,7}$/.test(text) ? text.padStart(text.length + 3, '0') : text;
+}
+
+function isSurveyInstall(item) {
+  return Boolean(item?.transaction && !String(item?.subscriber || '').trim());
 }
 
 function normalizeContactRows(rows) {
@@ -66,7 +77,7 @@ async function loadData(showMessage = false) {
       const res = await fetch(appsScriptEndpoint({ action: 'progress', ts: Date.now() }), { cache: 'no-store' });
       if (!res.ok) throw new Error('Không thể kết nối Apps Script');
       const json = await res.json();
-      state.all = (Array.isArray(json) ? json : json.data).map(x => ({ ...x, status: x.status?.trim() || 'Chưa cập nhật', note: x.note || '' }));
+      state.all = (Array.isArray(json) ? json : json.data).map(x => ({ ...x, transaction: normalizeTransaction(x.transaction, x.subscriber), status: x.status?.trim() || 'Chưa cập nhật', note: x.note || '' }));
       $('sourceLabel').textContent = `Đồng bộ Google Sheet - ${state.all.length.toLocaleString('vi-VN')} phiếu`;
     } else {
       const res = await fetch(CONFIG.fallbackCsv, { cache: 'no-store' });
@@ -202,10 +213,18 @@ function matchesSearch(item, query) {
   return itemSearchText(item).includes(normalized) || (codeQuery.length >= 3 && itemSearchCode(item).includes(codeQuery));
 }
 
+function matchesSlaFilter(item, filter) {
+  if (!filter) return true;
+  const className = slaInfo(item).className;
+  if (filter === 'overdue') return className === 'overdue';
+  if (filter === 'in-date') return className !== 'overdue' && className !== 'unknown';
+  return true;
+}
+
 function applyFilters() {
   const q = $('searchInput').value.trim();
-  const employee = $('employeeFilter').value, status = $('statusFilter').value, service = $('serviceFilter').value;
-  state.filtered = state.all.filter(x => (!employee || x.employee === employee) && (!status || x.status === status) && (!service || x.service === service) && (!q || matchesSearch(x, q)));
+  const employee = $('employeeFilter').value, status = $('statusFilter').value, service = $('serviceFilter').value, sla = $('slaFilter').value;
+  state.filtered = state.all.filter(x => (!employee || x.employee === employee) && (!status || x.status === status) && (!service || x.service === service) && matchesSlaFilter(x, sla) && (!q || matchesSearch(x, q)));
   sortFiltered();
   state.page = 1; render();
 }
@@ -252,7 +271,7 @@ function parseVnDate(value) {
   const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
   return Number.isNaN(date.getTime()) ? null : date;
 }
-function slaHours(service) { return /fiber/i.test(service || '') ? 24 : 48; }
+function slaHours(item) { return isSurveyInstall(item) || /fiber/i.test(item?.service || '') ? 24 : 48; }
 function formatDeadline(date) {
   return new Intl.DateTimeFormat('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }).format(date);
 }
@@ -271,7 +290,7 @@ function formatDuration(ms) {
 function slaInfo(item) {
   const assignedAt = parseVnDate(item.assigned);
   if (!assignedAt) return { className: 'unknown', label: 'Chưa có giờ giao', shortLabel: 'N/A', meta: 'Không tính được hạn xử lý' };
-  const hours = slaHours(item.service);
+  const hours = slaHours(item);
   const deadline = new Date(assignedAt.getTime() + hours * 60 * 60 * 1000);
   const completedAt = parseVnDate(item.completed);
   const checkAt = isDone(item) && completedAt ? completedAt : new Date();
@@ -299,7 +318,8 @@ function renderTable() {
   $('workTable').innerHTML = data.map(x => {
     const sla = slaInfo(x);
     const tooltip = `${sla.label} | ${sla.meta}`;
-    return `<tr data-id="${x.id}" class="${isLocked(x)?'locked-row':''}"><td class="date-cell">${formatTableDate(x.assigned)}</td><td class="transaction-cell">${escapeHtml(x.transaction)}</td><td>${escapeHtml(x.subscriber)}</td><td>${escapeHtml(x.service)}</td><td><span class="sla-chip ${sla.className}" data-tooltip="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${escapeHtml(sla.shortLabel)}</span></td><td class="employee-cell">${escapeHtml(x.employee)}</td><td><span class="badge status-view ${badgeClass(x.status)}">${escapeHtml(statusLabel(x.status))}</span><select class="edit-field row-status edit-control"><option value="Chưa cập nhật" ${x.status==='Chưa cập nhật'||!x.status?'selected':''}>Chưa cập nhật</option><option value="Đang xử lý" ${x.status==='Đang xử lý'?'selected':''}>Đang xử lý</option><option value="Đã hoàn công" ${isDone(x)?'selected':''}>Đã hoàn công</option></select></td><td class="completed-cell date-cell">${formatTableDate(x.completed)}</td><td class="issue-cell" data-full="${escapeHtml(x.issue || 'Không có vướng mắc')}"><div class="cell-view hover-full multiline" title="${escapeHtml(x.issue || 'Không có vướng mắc')}">${escapeHtml(x.issue) || '—'}</div><textarea class="edit-field row-issue edit-control" placeholder="Nội dung vướng mắc">${escapeHtml(x.issue)}</textarea></td><td class="note-cell" data-full="${escapeHtml(x.note || 'Không có ghi chú')}"><div class="cell-view hover-full multiline" title="${escapeHtml(x.note || 'Không có ghi chú')}">${escapeHtml(x.note || '') || '—'}</div><textarea class="edit-field row-note edit-control" placeholder="Đầu mối kỹ thuật, thi công...">${escapeHtml(x.note || '')}</textarea></td><td class="action-cell">${isLocked(x)?'<span class="lock-icon" title="Phiếu đã hoàn công">✓</span>':`<button class="icon-btn edit-btn" onclick="editRow(${x.id}, this)" title="Sửa phiếu" aria-label="Sửa phiếu">✎</button><button class="icon-btn save-btn edit-control" onclick="saveRow(${x.id}, this)" title="Lưu phiếu" aria-label="Lưu phiếu">✓</button>`}</td></tr>`;
+    const serviceLabel = isSurveyInstall(x) ? 'Khảo sát lắp đặt' : x.service;
+    return `<tr data-id="${x.id}" class="${isLocked(x)?'locked-row':''}"><td class="date-cell">${formatTableDate(x.assigned)}</td><td class="transaction-cell">${escapeHtml(x.transaction)}</td><td>${escapeHtml(x.subscriber) || '—'}</td><td>${escapeHtml(serviceLabel)}</td><td><span class="sla-chip ${sla.className}" data-tooltip="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${escapeHtml(sla.shortLabel)}</span></td><td class="employee-cell">${escapeHtml(x.employee)}</td><td><span class="badge status-view ${badgeClass(x.status)}">${escapeHtml(statusLabel(x.status))}</span><select class="edit-field row-status edit-control"><option value="Chưa cập nhật" ${x.status==='Chưa cập nhật'||!x.status?'selected':''}>Chưa cập nhật</option><option value="Đang xử lý" ${x.status==='Đang xử lý'?'selected':''}>Đang xử lý</option><option value="Đã hoàn công" ${isDone(x)?'selected':''}>Đã hoàn công</option></select></td><td class="completed-cell date-cell">${formatTableDate(x.completed)}</td><td class="issue-cell" data-full="${escapeHtml(x.issue || 'Không có vướng mắc')}"><div class="cell-view hover-full multiline" title="${escapeHtml(x.issue || 'Không có vướng mắc')}">${escapeHtml(x.issue) || '—'}</div><textarea class="edit-field row-issue edit-control" placeholder="Nội dung vướng mắc">${escapeHtml(x.issue)}</textarea></td><td class="note-cell"><div class="cell-view note-view multiline" title="${escapeHtml(x.note || 'Không có ghi chú')}">${escapeHtml(x.note || '') || '—'}</div><textarea class="edit-field row-note edit-control" placeholder="Đầu mối kỹ thuật, thi công...">${escapeHtml(x.note || '')}</textarea></td><td class="action-cell">${isLocked(x)?'<span class="lock-icon" title="Phiếu đã hoàn công">✓</span>':`<button class="icon-btn edit-btn" onclick="editRow(${x.id}, this)" title="Sửa phiếu" aria-label="Sửa phiếu">✎</button><button class="icon-btn save-btn edit-control" onclick="saveRow(${x.id}, this)" title="Lưu phiếu" aria-label="Lưu phiếu">✓</button>`}</td></tr>`;
   }).join('') || '<tr><td colspan="11" class="empty">Không tìm thấy công việc phù hợp</td></tr>';
   $('pageLabel').textContent = `Trang ${state.page} / ${pages}`; $('prevPage').disabled = state.page <= 1; $('nextPage').disabled = state.page >= pages;
 }
@@ -317,7 +337,7 @@ function exportCSV() {
   const headers = ['Ngày giao','Mã giao dịch','Mã thuê bao','Dịch vụ','Cảnh báo','Hạn xử lý','Người thực hiện','Trạng thái','Ngày hoàn công','Nội dung vướng mắc','Ghi chú'];
   const csvRows = state.filtered.map(x => {
     const sla = slaInfo(x);
-    return [x.assigned, x.transaction, x.subscriber, x.service, sla.label, sla.meta, x.employee, x.status, x.completed, x.issue, x.note];
+    return [x.assigned, x.transaction, x.subscriber, isSurveyInstall(x) ? 'Khảo sát lắp đặt' : x.service, sla.label, sla.meta, x.employee, x.status, x.completed, x.issue, x.note];
   });
   const csv = '\ufeff' + [headers, ...csvRows].map(r=>r.map(v=>`"${String(v||'').replaceAll('"','""')}"`).join(',')).join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download = `tien-do-kenh-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href); toast('Đã xuất dữ liệu đang lọc');
@@ -365,8 +385,8 @@ function startAutoRefresh() {
   }, CONFIG.autoRefreshMs);
 }
 
-$('searchInput').addEventListener('input', applyFilters); ['employeeFilter','statusFilter','serviceFilter'].forEach(id=>$(id).addEventListener('change',applyFilters));
-$('clearFilters').onclick = () => { $('searchInput').value=''; ['employeeFilter','statusFilter','serviceFilter'].forEach(id=>$(id).value=''); applyFilters(); };
+$('searchInput').addEventListener('input', applyFilters); ['employeeFilter','statusFilter','serviceFilter','slaFilter'].forEach(id=>$(id).addEventListener('change',applyFilters));
+$('clearFilters').onclick = () => { $('searchInput').value=''; ['employeeFilter','statusFilter','serviceFilter','slaFilter'].forEach(id=>$(id).value=''); applyFilters(); };
 $('contactSearchInput').addEventListener('input', applyContactFilters); $('contactCenterFilter').addEventListener('change', applyContactFilters);
 $('contactSheetFilter').addEventListener('change', () => { state.contactSheet = $('contactSheetFilter').value; loadContacts(); });
 $('clearContactFilters').onclick = () => { $('contactSearchInput').value=''; $('contactCenterFilter').value=''; applyContactFilters(); };
