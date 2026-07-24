@@ -277,8 +277,8 @@ function formatDeadline(date) {
 }
 function formatTableDate(value) {
   const text = escapeHtml(value || '');
-  const match = text.match(/^(\d{1,2}\/\d{1,2}\/\d{4})\s+(.+)$/);
-  return match ? `<span class="date-stack"><b>${match[1]}</b><small>${match[2]}</small></span>` : text || '—';
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/\d{4}(?:\s+(\d{1,2}):(\d{1,2}))?/);
+  return match ? `<span class="date-stack"><b>${match[1]}/${match[2]}</b><small>${match[3] ? `${match[3]}:${match[4]}` : ''}</small></span>` : text || '—';
 }
 function formatDuration(ms) {
   const totalMinutes = Math.max(1, Math.ceil(Math.abs(ms) / 60000));
@@ -318,7 +318,7 @@ function renderTable() {
   $('workTable').innerHTML = data.map(x => {
     const sla = slaInfo(x);
     const tooltip = `${sla.label} | ${sla.meta}`;
-    const serviceLabel = isSurveyInstall(x) ? 'Khảo sát lắp đặt' : x.service;
+    const serviceLabel = isSurveyInstall(x) ? 'Khảo sát' : x.service;
     return `<tr data-id="${x.id}" class="${isLocked(x)?'locked-row':''}"><td class="date-cell">${formatTableDate(x.assigned)}</td><td class="transaction-cell">${escapeHtml(x.transaction)}</td><td>${escapeHtml(x.subscriber) || '—'}</td><td>${escapeHtml(serviceLabel)}</td><td><span class="sla-chip ${sla.className}" data-tooltip="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${escapeHtml(sla.shortLabel)}</span></td><td class="employee-cell">${escapeHtml(x.employee)}</td><td><span class="badge status-view ${badgeClass(x.status)}">${escapeHtml(statusLabel(x.status))}</span><select class="edit-field row-status edit-control"><option value="Chưa cập nhật" ${x.status==='Chưa cập nhật'||!x.status?'selected':''}>Chưa cập nhật</option><option value="Đang xử lý" ${x.status==='Đang xử lý'?'selected':''}>Đang xử lý</option><option value="Đã hoàn công" ${isDone(x)?'selected':''}>Đã hoàn công</option></select></td><td class="completed-cell date-cell">${formatTableDate(x.completed)}</td><td class="issue-cell" data-full="${escapeHtml(x.issue || 'Không có vướng mắc')}"><div class="cell-view hover-full multiline" title="${escapeHtml(x.issue || 'Không có vướng mắc')}">${escapeHtml(x.issue) || '—'}</div><textarea class="edit-field row-issue edit-control" placeholder="Nội dung vướng mắc">${escapeHtml(x.issue)}</textarea></td><td class="note-cell"><div class="cell-view note-view multiline" title="${escapeHtml(x.note || 'Không có ghi chú')}">${escapeHtml(x.note || '') || '—'}</div><textarea class="edit-field row-note edit-control" placeholder="Đầu mối kỹ thuật, thi công...">${escapeHtml(x.note || '')}</textarea></td><td class="action-cell">${isLocked(x)?'<span class="lock-icon" title="Phiếu đã hoàn công">✓</span>':`<button class="icon-btn edit-btn" onclick="editRow(${x.id}, this)" title="Sửa phiếu" aria-label="Sửa phiếu">✎</button><button class="icon-btn save-btn edit-control" onclick="saveRow(${x.id}, this)" title="Lưu phiếu" aria-label="Lưu phiếu">✓</button>`}</td></tr>`;
   }).join('') || '<tr><td colspan="11" class="empty">Không tìm thấy công việc phù hợp</td></tr>';
   $('pageLabel').textContent = `Trang ${state.page} / ${pages}`; $('prevPage').disabled = state.page <= 1; $('nextPage').disabled = state.page >= pages;
@@ -337,7 +337,7 @@ function exportCSV() {
   const headers = ['Ngày giao','Mã giao dịch','Mã thuê bao','Dịch vụ','Cảnh báo','Hạn xử lý','Người thực hiện','Trạng thái','Ngày hoàn công','Nội dung vướng mắc','Ghi chú'];
   const csvRows = state.filtered.map(x => {
     const sla = slaInfo(x);
-    return [x.assigned, x.transaction, x.subscriber, isSurveyInstall(x) ? 'Khảo sát lắp đặt' : x.service, sla.label, sla.meta, x.employee, x.status, x.completed, x.issue, x.note];
+    return [x.assigned, x.transaction, x.subscriber, isSurveyInstall(x) ? 'Khảo sát' : x.service, sla.label, sla.meta, x.employee, x.status, x.completed, x.issue, x.note];
   });
   const csv = '\ufeff' + [headers, ...csvRows].map(r=>r.map(v=>`"${String(v||'').replaceAll('"','""')}"`).join(',')).join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download = `tien-do-kenh-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href); toast('Đã xuất dữ liệu đang lọc');
@@ -357,7 +357,10 @@ async function saveRow(id, button) {
     Object.assign(item, json.data);
     if (json.data.status === 'Đã hoàn công' && !item.completed) item.completed = formatNow();
     render(); toast('Đã cập nhật phiếu ' + item.transaction);
-  } catch (err) { toast(err.message); }
+  } catch (err) {
+    toast(err.message);
+    if (String(err.message || '').includes('Dữ liệu đã thay đổi')) loadData(false);
+  }
   finally { button.disabled = false; button.textContent = '✓'; }
 }
 

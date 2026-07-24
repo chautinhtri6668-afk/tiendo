@@ -24,7 +24,7 @@ function getProgress_() {
     const r = x.values;
     return {
     id: x.row,
-    assigned: r[0] || '', transaction: r[1] || '', subscriber: r[2] || '',
+    assigned: r[0] || '', transaction: normalizeTransaction_(r[1], r[2]), subscriber: r[2] || '',
     service: r[3] || '', employee: r[4] || 'Chưa phân công',
     status: r[5] || 'Chưa cập nhật', completed: r[6] || '', issue: r[7] || '', note: r[8] || ''
   }});
@@ -80,33 +80,57 @@ function doPost(e) {
     ensureNoteHeader_(sheet);
     const row = Number(body.id);
     if (!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()) throw new Error('Phiếu không tồn tại');
-    const transaction = sheet.getRange(row, 2).getDisplayValue();
-    if (body.transaction && transaction !== body.transaction) throw new Error('Dữ liệu đã thay đổi, hãy làm mới trang');
+    const transaction = normalizeTransaction_(sheet.getRange(row, 2).getDisplayValue(), sheet.getRange(row, 3).getDisplayValue());
+    if (body.transaction && transaction !== body.transaction) throw new Error('Dữ liệu đã thay đổi, trang sẽ tự làm mới. Hãy sửa lại đúng dòng vừa cập nhật');
     const oldStatus = sheet.getRange(row, 6).getDisplayValue();
     const completedCell = sheet.getRange(row, 7);
     if (oldStatus === 'Đã hoàn công' && !completedCell.isBlank()) throw new Error('Phiếu đã hoàn công và đã bị khóa');
-    sheet.getRange(row, 6).setValue(body.status);
     let completedText = completedCell.getDisplayValue();
-    if (body.status === 'Đã hoàn công' && completedCell.isBlank()) {
-      const completedAt = new Date();
-      completedCell.setValue(completedAt).setNumberFormat('dd/MM/yyyy HH:mm:ss');
-      completedText = Utilities.formatDate(completedAt, ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+
+    if (body.status !== oldStatus) {
+      sheet.getRange(row, 6).setValue(body.status);
+      if (body.status === 'Đã hoàn công' && completedCell.isBlank()) {
+        const completedAt = new Date();
+        completedCell.setValue(completedAt).setNumberFormat('dd/MM/yyyy HH:mm:ss');
+        completedText = Utilities.formatDate(completedAt, ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+      }
+      if (body.status === 'Đang xử lý' || body.status === 'Chưa cập nhật') {
+        completedCell.clearContent();
+        completedText = '';
+      }
     }
-    if (body.status === 'Đang xử lý' || body.status === 'Chưa cập nhật') completedCell.clearContent();
-    sheet.getRange(row, 8).setValue(String(body.issue || ''));
-    sheet.getRange(row, 9).setValue(String(body.note || ''));
+
+    const issueText = String(body.issue || '');
+    const noteText = String(body.note || '');
+    if (sheet.getRange(row, 8).getDisplayValue() !== issueText) sheet.getRange(row, 8).setValue(issueText);
+    if (sheet.getRange(row, 9).getDisplayValue() !== noteText) sheet.getRange(row, 9).setValue(noteText);
     SpreadsheetApp.flush();
-    if (body.status === 'Đang xử lý' || body.status === 'Chưa cập nhật') completedText = '';
-    return json_({ ok: true, data: { id: row, status: body.status, completed: completedText, issue: String(body.issue || ''), note: String(body.note || '') } });
+    return json_({ ok: true, data: { id: row, status: body.status, completed: completedText, issue: issueText, note: noteText } });
   } catch (err) {
-    return json_({ ok: false, error: err.message });
+    const message = String(err && err.message || err);
+    if (message.includes('protected') || message.includes('bảo vệ')) return json_({ ok: false, error: 'Sheet đang khóa ô cần cập nhật. Hãy bỏ bảo vệ cột Ghi chú/Vướng mắc/Trạng thái hoặc deploy Web App với Execute as: Me.' });
+    return json_({ ok: false, error: message });
   } finally {
     lock.releaseLock();
   }
 }
 
 function ensureNoteHeader_(sheet) {
-  if (!sheet.getRange(1, 9).getValue()) sheet.getRange(1, 9).setValue('Ghi chú');
+  const cell = sheet.getRange(1, 9);
+  if (!cell.getValue()) {
+    try {
+      cell.setValue('Ghi chú');
+    } catch (err) {
+      // Header may be protected; updates can still work if the data cells are editable.
+    }
+  }
+}
+
+function normalizeTransaction_(transaction, subscriber) {
+  const text = String(transaction || '').trim();
+  if (!text || String(subscriber || '').trim()) return text;
+  if (text.indexOf('000') === 0) return text;
+  return /^\d{1,7}$/.test(text) ? text.padStart(text.length + 3, '0') : text;
 }
 
 function json_(value) {
