@@ -7,7 +7,16 @@ const CONFIG = {
   contactsCsvUrl: 'https://docs.google.com/spreadsheets/d/1Xd88BoxLjjv7oY05yQEz-8NcPJCC0iUe/export?format=csv&gid=1904024602',
   contactsFallbackCsv: './contacts.csv',
   pageSize: 18,
-  autoRefreshMs: 60000
+  autoRefreshMs: 60000,
+  // Nhap dd/MM cho ngay le lap lai hang nam, dd/MM/yyyy cho ngay le rieng tung nam.
+  holidays: [
+    '01/01',
+    '16/02/2026', '17/02/2026', '18/02/2026', '19/02/2026', '20/02/2026',
+    '26/04/2026', '27/04/2026',
+    '30/04',
+    '01/05',
+    '01/09/2026', '02/09'
+  ]
 };
 
 const state = { all: [], filtered: [], contacts: [], contactFiltered: [], page: 1, contactSheet: CONFIG.contactSheets[0], sortMode: 'assigned-desc' };
@@ -272,6 +281,73 @@ function parseVnDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 function slaHours(item) { return isSurveyInstall(item) || /fiber/i.test(item?.service || '') ? 24 : 48; }
+function dateKey(date) {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return { annual: `${day}/${month}`, exact: `${day}/${month}/${date.getFullYear()}` };
+}
+function isHoliday(date) {
+  const keys = dateKey(date);
+  return CONFIG.holidays.includes(keys.annual) || CONFIG.holidays.includes(keys.exact);
+}
+function isNonWorkingDay(date) {
+  const day = date.getDay();
+  return day === 0 || day === 6 || isHoliday(date);
+}
+function moveToNextDay(date) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + 1);
+  return next;
+}
+function startOfNextDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+}
+function nextWorkingMoment(date) {
+  let cursor = new Date(date);
+  let guard = 0;
+  while (isNonWorkingDay(cursor) && guard < 370) {
+    cursor = moveToNextDay(cursor);
+    guard++;
+  }
+  return cursor;
+}
+function addWorkingHours(start, hours) {
+  let cursor = nextWorkingMoment(start);
+  let remaining = hours * 60 * 60 * 1000;
+  let guard = 0;
+  while (remaining > 0 && guard < 1000) {
+    if (isNonWorkingDay(cursor)) {
+      cursor = nextWorkingMoment(cursor);
+      guard++;
+      continue;
+    }
+    const boundary = startOfNextDay(cursor);
+    const available = boundary.getTime() - cursor.getTime();
+    if (remaining <= available) return new Date(cursor.getTime() + remaining);
+    remaining -= available;
+    cursor = nextWorkingMoment(boundary);
+    guard++;
+  }
+  return cursor;
+}
+function workingMsBetween(from, to) {
+  const start = from.getTime() <= to.getTime() ? from : to;
+  const end = from.getTime() <= to.getTime() ? to : from;
+  let cursor = nextWorkingMoment(start), total = 0, guard = 0;
+  while (cursor.getTime() < end.getTime() && guard < 1000) {
+    if (isNonWorkingDay(cursor)) {
+      cursor = nextWorkingMoment(cursor);
+      guard++;
+      continue;
+    }
+    const boundary = startOfNextDay(cursor);
+    const segmentEnd = Math.min(boundary.getTime(), end.getTime());
+    total += Math.max(0, segmentEnd - cursor.getTime());
+    cursor = nextWorkingMoment(new Date(segmentEnd));
+    guard++;
+  }
+  return from.getTime() <= to.getTime() ? total : -total;
+}
 function formatDeadline(date) {
   return new Intl.DateTimeFormat('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }).format(date);
 }
@@ -291,11 +367,11 @@ function slaInfo(item) {
   const assignedAt = parseVnDate(item.assigned);
   if (!assignedAt) return { className: 'unknown', label: 'Chưa có giờ giao', shortLabel: 'N/A', meta: 'Không tính được hạn xử lý' };
   const hours = slaHours(item);
-  const deadline = new Date(assignedAt.getTime() + hours * 60 * 60 * 1000);
+  const deadline = addWorkingHours(assignedAt, hours);
   const completedAt = parseVnDate(item.completed);
   const checkAt = isDone(item) && completedAt ? completedAt : new Date();
-  const remaining = deadline.getTime() - checkAt.getTime();
-  const meta = `Hạn ${formatDeadline(deadline)} (${hours}h)`;
+  const remaining = workingMsBetween(checkAt, deadline);
+  const meta = `Hạn ${formatDeadline(deadline)} (${hours}h, không tính T7/CN/ngày lễ)`;
   if (isDone(item)) return remaining >= 0
     ? { className: 'done', label: 'Hoàn công đúng hạn', shortLabel: 'Đúng hạn', meta }
     : { className: 'overdue', label: `Hoàn công trễ ${formatDuration(remaining)}`, shortLabel: `Trễ ${shortDuration(remaining)}`, meta };
