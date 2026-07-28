@@ -83,15 +83,19 @@ async function loadData(showMessage = false) {
   $('refreshBtn').disabled = true;
   try {
     if (CONFIG.appsScriptUrl) {
-      const res = await fetch(appsScriptEndpoint({ action: 'progress', ts: Date.now() }), { cache: 'no-store' });
-      if (!res.ok) throw new Error('Không thể kết nối Apps Script');
-      const json = await res.json();
-      state.all = (Array.isArray(json) ? json : json.data).map(x => ({ ...x, transaction: normalizeTransaction(x.transaction, x.subscriber), status: x.status?.trim() || 'Chưa cập nhật', note: x.note || '' }));
-      $('sourceLabel').textContent = `Đồng bộ Google Sheet - ${state.all.length.toLocaleString('vi-VN')} phiếu`;
+      try {
+        const res = await fetch(appsScriptEndpoint({ action: 'progress', ts: Date.now() }), { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Không thể kết nối Apps Script (${res.status})`);
+        const json = await res.json();
+        if (json.error) throw new Error(json.error);
+        state.all = (Array.isArray(json) ? json : json.data).map(normalizeProgressItem);
+        $('sourceLabel').textContent = `Đồng bộ Google Sheet - ${state.all.length.toLocaleString('vi-VN')} phiếu`;
+      } catch (scriptErr) {
+        await loadFallbackProgress();
+        $('sourceLabel').textContent = `${scriptErr.message}; đang dùng sheet.csv`;
+      }
     } else {
-      const res = await fetch(CONFIG.fallbackCsv, { cache: 'no-store' });
-      if (!res.ok) throw new Error('Không tìm thấy sheet.csv');
-      state.all = normalizeRows(parseCSV(await res.text()));
+      await loadFallbackProgress();
       $('sourceLabel').textContent = 'Bản dữ liệu Google Sheet gần nhất';
     }
     populateFilters(); applyFilters();
@@ -101,6 +105,16 @@ async function loadData(showMessage = false) {
     $('workTable').innerHTML = `<tr><td colspan="11" class="empty">${escapeHtml(err.message)}. Hãy chạy site qua web server.</td></tr>`;
     toast(err.message);
   } finally { $('refreshBtn').disabled = false; }
+}
+
+function normalizeProgressItem(x) {
+  return { ...x, transaction: normalizeTransaction(x.transaction, x.subscriber), status: x.status?.trim() || 'Chưa cập nhật', completed: x.completed || '', issue: x.issue || '', note: x.note || '' };
+}
+
+async function loadFallbackProgress() {
+  const res = await fetch(CONFIG.fallbackCsv, { cache: 'no-store' });
+  if (!res.ok) throw new Error('Không tìm thấy sheet.csv');
+  state.all = normalizeRows(parseCSV(await res.text()));
 }
 
 async function fetchCsvWithFallback(url, fallbackUrl) {
@@ -428,6 +442,7 @@ async function saveRow(id, button) {
   button.disabled = true; button.textContent = 'Đang lưu...';
   try {
     const res = await fetch(CONFIG.appsScriptUrl, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload) });
+    if (!res.ok) throw new Error(`Không kết nối được Apps Script (${res.status})`);
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'Không thể cập nhật phiếu');
     Object.assign(item, json.data);
