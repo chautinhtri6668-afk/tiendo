@@ -40,7 +40,7 @@ function parseCSV(text) {
 
 function normalizeRows(rows) {
   return rows.slice(1).filter(r => r.slice(0, 8).some(Boolean)).map((r, index) => ({
-    id: index + 1, assigned: r[0]?.trim() || '', transaction: normalizeTransaction(r[1], r[2]),
+    id: index + 2, assigned: r[0]?.trim() || '', transaction: normalizeTransaction(r[1], r[2]),
     subscriber: r[2]?.trim() || '', service: r[3]?.trim() || '', employee: r[4]?.trim() || 'Chưa phân công',
     status: r[5]?.trim() || 'Chưa cập nhật', completed: r[6]?.trim() || '', issue: r[7]?.trim() || '', note: r[8]?.trim() || ''
   }));
@@ -438,6 +438,7 @@ function toast(msg) { $('toast').textContent = msg; $('toast').classList.add('sh
 async function saveRow(id, button) {
   if (!CONFIG.appsScriptUrl) return toast('Chưa cấu hình Apps Script');
   const tr = button.closest('tr'), item = state.all.find(x => Number(x.id) === Number(id));
+  if (!item) return toast('Không tìm thấy phiếu trên màn hình, hãy tải lại dữ liệu');
   const payload = { action:'update', id:Number(id), transaction:item?.transaction || '', status:tr.querySelector('.row-status').value, issue:tr.querySelector('.row-issue').value.trim(), note:tr.querySelector('.row-note').value.trim() };
   button.disabled = true; button.textContent = 'Đang lưu...';
   try {
@@ -445,7 +446,7 @@ async function saveRow(id, button) {
     if (!res.ok) throw new Error(`Không kết nối được Apps Script (${res.status})`);
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'Không thể cập nhật phiếu');
-    Object.assign(item, json.data);
+    Object.assign(item, payload, json.data);
     if (json.data.status === 'Đã hoàn công' && !item.completed) item.completed = formatNow();
     render(); toast('Đã cập nhật phiếu ' + item.transaction);
   } catch (err) {
