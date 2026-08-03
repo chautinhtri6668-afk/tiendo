@@ -6,6 +6,7 @@ const CONFIG = {
   contactSheets: ['TTVT8', '18 Trung tâm Viễn Thông', 'Lãnh đạo P.HT', 'Danh bạ P.HT', 'DB mới 1-10', 'VNPT địa bàn'],
   contactsCsvUrl: 'https://docs.google.com/spreadsheets/d/1Xd88BoxLjjv7oY05yQEz-8NcPJCC0iUe/export?format=csv&gid=1904024602',
   contactsFallbackCsv: './contacts.csv',
+  fallbackProgressSheets: [{ id: 'sheet.csv', label: 'sheet.csv' }],
   pageSize: 18,
   autoRefreshMs: 60000,
   // Nhap dd/MM cho ngay le lap lai hang nam, dd/MM/yyyy cho ngay le rieng tung nam.
@@ -19,7 +20,7 @@ const CONFIG = {
   ]
 };
 
-const state = { all: [], filtered: [], contacts: [], contactFiltered: [], page: 1, contactSheet: CONFIG.contactSheets[0], sortMode: 'assigned-desc' };
+const state = { all: [], filtered: [], contacts: [], contactFiltered: [], progressSheets: [], progressSheet: '', page: 1, contactSheet: CONFIG.contactSheets[0], sortMode: 'assigned-desc' };
 const $ = (id) => document.getElementById(id);
 
 function parseCSV(text) {
@@ -84,12 +85,20 @@ async function loadData(showMessage = false) {
   try {
     if (CONFIG.appsScriptUrl) {
       try {
-        const res = await fetch(appsScriptEndpoint({ action: 'progress', ts: Date.now() }), { cache: 'no-store' });
+        if (!state.progressSheets.length) await loadProgressSheets();
+        const params = { action: 'progress', ts: Date.now() };
+        if (state.progressSheet) params.sheet = state.progressSheet;
+        const res = await fetch(appsScriptEndpoint(params), { cache: 'no-store' });
         if (!res.ok) throw new Error(`Không thể kết nối Apps Script (${res.status})`);
         const json = await res.json();
         if (json.error) throw new Error(json.error);
         state.all = (Array.isArray(json) ? json : json.data).map(normalizeProgressItem);
-        $('sourceLabel').textContent = `Đồng bộ Google Sheet - ${state.all.length.toLocaleString('vi-VN')} phiếu`;
+        if (json.sheet && json.sheet.id) {
+          state.progressSheet = String(json.sheet.id);
+          populateProgressSheets(state.progressSheets.length ? state.progressSheets : [json.sheet]);
+        }
+        const sheetLabel = selectedProgressSheetLabel();
+        $('sourceLabel').textContent = `Đồng bộ Google Sheet${sheetLabel ? ` (${sheetLabel})` : ''} - ${state.all.length.toLocaleString('vi-VN')} phiếu`;
       } catch (scriptErr) {
         await loadFallbackProgress();
         $('sourceLabel').textContent = `${scriptErr.message}; đang dùng sheet.csv`;
@@ -112,6 +121,7 @@ function normalizeProgressItem(x) {
 }
 
 async function loadFallbackProgress() {
+  populateProgressSheets(CONFIG.fallbackProgressSheets);
   const res = await fetch(CONFIG.fallbackCsv, { cache: 'no-store' });
   if (!res.ok) throw new Error('Không tìm thấy sheet.csv');
   state.all = normalizeRows(parseCSV(await res.text()));
@@ -142,6 +152,18 @@ async function fetchContactsFromAppsScript(sheetName) {
   if (json.error) throw new Error(json.error);
   if (json.sheet !== sheetName) throw new Error('Apps Script chưa cập nhật API danh bạ');
   return Array.isArray(json.data) ? json.data : [];
+}
+
+async function loadProgressSheets() {
+  if (!CONFIG.appsScriptUrl) {
+    populateProgressSheets(CONFIG.fallbackProgressSheets);
+    return;
+  }
+  const res = await fetch(appsScriptEndpoint({ action: 'progressSheets', ts: Date.now() }), { cache: 'no-store' });
+  if (!res.ok) throw new Error('Không tải được danh sách tháng');
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+  populateProgressSheets(Array.isArray(json.sheets) ? json.sheets : []);
 }
 
 async function loadContacts() {
@@ -180,6 +202,21 @@ function populateFilters() {
   statusSelect.innerHTML = '<option value="">Tất cả trạng thái</option><option value="Đã hoàn công">Đã hoàn thành</option><option value="Đang xử lý">Đang xử lý</option><option value="Chưa cập nhật">Chưa cập nhật</option>';
   statusSelect.value = currentStatus;
   fillSelect('serviceFilter', unique('service'));
+}
+function populateProgressSheets(sheets) {
+  const list = sheets.map(sheet => ({
+    id: String(sheet.id || sheet.gid || sheet.name || ''),
+    label: String(sheet.label || sheet.name || sheet.id || '')
+  })).filter(sheet => sheet.id && sheet.label);
+  if (!list.length) return;
+  state.progressSheets = list;
+  const select = $('monthFilter'), current = state.progressSheet || select.value || list[0].id;
+  select.innerHTML = list.map(sheet => `<option value="${escapeHtml(sheet.id)}">${escapeHtml(sheet.label)}</option>`).join('');
+  select.value = list.some(sheet => sheet.id === current) ? current : list[0].id;
+  state.progressSheet = select.value;
+}
+function selectedProgressSheetLabel() {
+  return state.progressSheets.find(sheet => sheet.id === state.progressSheet)?.label || $('monthFilter')?.selectedOptions?.[0]?.textContent || '';
 }
 function populateContactCenters() {
   const centers = [...new Set(state.contacts.map(x => x.center).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
@@ -439,7 +476,7 @@ async function saveRow(id, button) {
   if (!CONFIG.appsScriptUrl) return toast('Chưa cấu hình Apps Script');
   const tr = button.closest('tr'), item = state.all.find(x => Number(x.id) === Number(id));
   if (!item) return toast('Không tìm thấy phiếu trên màn hình, hãy tải lại dữ liệu');
-  const payload = { action:'update', id:Number(id), transaction:item?.transaction || '', status:tr.querySelector('.row-status').value, issue:tr.querySelector('.row-issue').value.trim(), note:tr.querySelector('.row-note').value.trim() };
+  const payload = { action:'update', id:Number(id), sheet:state.progressSheet, transaction:item?.transaction || '', status:tr.querySelector('.row-status').value, issue:tr.querySelector('.row-issue').value.trim(), note:tr.querySelector('.row-note').value.trim() };
   button.disabled = true; button.textContent = 'Đang lưu...';
   try {
     const res = await fetch(CONFIG.appsScriptUrl, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload) });
@@ -481,6 +518,7 @@ function startAutoRefresh() {
 }
 
 $('searchInput').addEventListener('input', applyFilters); ['employeeFilter','statusFilter','serviceFilter','slaFilter'].forEach(id=>$(id).addEventListener('change',applyFilters));
+$('monthFilter').addEventListener('change', () => { state.progressSheet = $('monthFilter').value; loadData(true); });
 $('clearFilters').onclick = () => { $('searchInput').value=''; ['employeeFilter','statusFilter','serviceFilter','slaFilter'].forEach(id=>$(id).value=''); applyFilters(); };
 $('contactSearchInput').addEventListener('input', applyContactFilters); $('contactCenterFilter').addEventListener('change', applyContactFilters);
 $('contactSheetFilter').addEventListener('change', () => { state.contactSheet = $('contactSheetFilter').value; loadContacts(); });
