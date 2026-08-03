@@ -460,6 +460,12 @@ function renderContacts() {
   $('contactCount').textContent = `${state.contactFiltered.length.toLocaleString('vi-VN')} đầu mối`;
   $('contactsTable').innerHTML = state.contactFiltered.map(x => `<tr><td>${escapeHtml(x.center)}</td><td>${escapeHtml(x.team) || '—'}</td><td><b>${escapeHtml(x.name) || '—'}</b>${x.title ? `<small>${escapeHtml(x.title)}</small>` : ''}</td><td>${escapeHtml(x.phone) || '—'}</td><td>${x.email ? `<a href="mailto:${escapeHtml(x.email)}">${escapeHtml(x.email)}</a>` : '—'}</td><td>${escapeHtml(x.birthday) || '—'}</td><td><div class="cell-view expandable" onclick="toggleCell(this)" title="Bấm để xem đầy đủ">${escapeHtml(x.note) || '—'}</div></td></tr>`).join('') || '<tr><td colspan="7" class="empty">Không tìm thấy đầu mối phù hợp</td></tr>';
 }
+function mergeProgressItem(id, data) {
+  [state.all, state.filtered].forEach(list => {
+    const item = list.find(x => Number(x.id) === Number(id));
+    if (item) Object.assign(item, data);
+  });
+}
 function exportCSV() {
   const headers = ['Ngày giao','Mã giao dịch','Mã thuê bao','Dịch vụ','Cảnh báo','Hạn xử lý','Người thực hiện','Trạng thái','Ngày hoàn công','Nội dung vướng mắc','Ghi chú'];
   const csvRows = state.filtered.map(x => {
@@ -483,9 +489,12 @@ async function saveRow(id, button) {
     if (!res.ok) throw new Error(`Không kết nối được Apps Script (${res.status})`);
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'Không thể cập nhật phiếu');
-    Object.assign(item, payload, json.data);
-    if (json.data.status === 'Đã hoàn công' && !item.completed) item.completed = formatNow();
-    render(); toast('Đã cập nhật phiếu ' + item.transaction);
+    const updated = { ...payload, ...json.data };
+    if (updated.status === 'Đã hoàn công' && !String(updated.completed || item.completed || '').trim()) updated.completed = formatNow();
+    mergeProgressItem(id, updated);
+    sortFiltered();
+    render(); toast('Đã cập nhật phiếu ' + (updated.transaction || item.transaction));
+    setTimeout(() => loadData(false), 350);
   } catch (err) {
     toast(err.message);
     if (String(err.message || '').includes('Dữ liệu đã thay đổi')) loadData(false);
